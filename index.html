@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3포대 출타관리</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Firebase SDK 모듈 로드 및 사용자 설정 반영 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // 본인의 Firebase 프로젝트 설정값 적용 완료
+        const firebaseConfig = {
+            apiKey: "AIzaSyDF0uMwfOHqLLWVQYAk8FPDHjnJPsMLceU",
+            authDomain: "chulta-583d7.firebaseapp.com",
+            projectId: "chulta-583d7",
+            storageBucket: "chulta-583d7.firebasestorage.app",
+            messagingSenderId: "975690657951",
+            appId: "1:975690657951:web:d6d43417a95885070372aa",
+            measurementId: "G-S1RXFC5GGW"
+        };
+
+        // Firebase 초기화
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // 전역으로 사용할 수 있게 window에 등록
+        window.db = db;
+        window.collection = collection;
+        window.addDoc = addDoc;
+        window.getDocs = getDocs;
+        window.deleteDoc = deleteDoc;
+        window.doc = doc;
+        window.onSnapshot = onSnapshot;
+        window.query = query;
+        window.orderBy = orderBy;
+
+        // 파이어베이스 연동 후 데이터 실시간 리스너 시작
+        window.initFirebaseRealtimeSync();
+    </script>
+
+    <style>
+        body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- 상단 헤더 -->
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <h1 class="text-xl font-bold tracking-tight flex items-center gap-2">
+                <i class="fa-solid fa-calendar-days text-emerald-400"></i> 3포대 출타관리
+            </h1>
+            <div id="header-auth-area" class="flex items-center gap-2">
+                <button onclick="showPublicCalendar()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-calendar-days"></i> 달력 보기
+                </button>
+                <button onclick="openAdminLoginModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg text-sm font-medium transition border border-slate-700 flex items-center gap-1.5">
+                    <i class="fa-solid fa-lock"></i> 관리자 로그인
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 컨테이너 -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 py-6">
+        
+        <!-- 일반 사용자 화면 (출타 신청서) -->
+        <div id="user-view" class="max-w-2xl mx-auto bg-white rounded-2xl shadow-lg p-6 sm:p-8">
+            <div class="border-b pb-4 mb-6">
+                <h2 class="text-2xl font-bold text-slate-900">출타 신청서 작성</h2>
+                <p class="text-sm text-slate-500 mt-1">휴가, 외출, 외박, 면회 신청을 위한 양식입니다. 신청 즉시 실시간 반영됩니다.</p>
+            </div>
+            
+            <form id="leave-form" onsubmit="handleFormSubmit(event)" class="space-y-5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">성명</label>
+                        <input type="text" id="soldier-name" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">군번</label>
+                        <input type="text" id="soldier-serial" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="예: 25-76052577">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">계급</label>
+                        <select id="soldier-rank" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                            <option value="">계급 선택</option>
+                            <option value="이병">이병</option>
+                            <option value="일병">일병</option>
+                            <option value="상병">상병</option>
+                            <option value="병장">병장</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">본인 연락처</label>
+                        <input type="tel" id="soldier-phone" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">출타 구분</label>
+                        <select id="leave-type" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" onchange="onLeaveTypeChange()">
+                            <option value="">선택하세요</option>
+                            <option value="휴가">휴가</option>
+                            <option value="외출">외출</option>
+                            <option value="외박">외박</option>
+                            <option value="면회">면회</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">행선지</label>
+                        <input type="text" id="destination" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- 외박 시 숙소 입력 -->
+                <div id="accommodation-section" class="hidden">
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">숙소 정보</label>
+                    <input type="text" id="accommodation" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="예: 호텔 또는 펜션 이름">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">시작일</label>
+                        <input type="date" id="start-date" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">종료일</label>
+                        <input type="date" id="end-date" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- 사유 입력란 -->
+                <div id="reason-container">
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">출타 사유</label>
+                    <textarea id="leave-reason" rows="3" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="출타 사유를 입력하세요"></textarea>
+                </div>
+
+                <!-- 외출/외박 시 선택 항목 -->
+                <div id="outing-sub-selector" class="hidden p-4 bg-slate-50 rounded-xl border space-y-3">
+                    <label class="block text-sm font-bold text-slate-700">외출/외박 동행 형태 선택</label>
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="outing-sub-type" value="buddy" checked onchange="toggleOutingSubType()"> 전우조 동행
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="outing-sub-type" value="visitor" onchange="toggleOutingSubType()"> 면회객 동행
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 전우조 동행 입력 섹션 -->
+                <div id="buddy-section" class="hidden p-4 bg-slate-50 rounded-xl border space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm font-bold text-slate-700"><i class="fa-solid fa-users text-emerald-600"></i> 전우조 동행인원 입력</h3>
+                        <button type="button" onclick="addBuddyField()" class="bg-emerald-600 text-white px-3 py-1 rounded-lg text-xs font-semibold">+ 동행인 추가</button>
+                    </div>
+                    <div id="buddy-list" class="space-y-3"></div>
+                </div>
+
+                <!-- 면회 정보 입력 섹션 -->
+                <div id="visitor-section" class="hidden p-4 bg-slate-50 rounded-xl border space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm font-bold text-slate-700"><i class="fa-solid fa-user-group text-emerald-600"></i> 면회객 정보 입력</h3>
+                        <button type="button" id="add-visitor-btn" onclick="addVisitorField()" class="bg-emerald-600 text-white px-3 py-1 rounded-lg text-xs font-semibold">+ 면회객 추가</button>
+                    </div>
+                    <div id="visitor-list" class="space-y-3"></div>
+                </div>
+
+                <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl transition shadow">
+                    출타 신청서 제출 (즉시 승인 및 공유)
+                </button>
+            </form>
+        </div>
+
+        <!-- 현황 대시보드 영역 -->
+        <div class="mt-8 space-y-6 max-w-2xl mx-auto">
+            <div class="bg-white rounded-2xl shadow-sm p-6 border">
+                <h3 class="text-lg font-bold text-slate-900 mb-4"><i class="fa-solid fa-chart-pie text-emerald-600"></i> 실시간 출타 현황 요약</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="font-bold text-slate-700">총 출타율 현황</h4>
+                        </div>
+                        <div class="flex items-baseline gap-2 mb-4">
+                            <span id="total-percentage" class="text-4xl font-extrabold text-slate-900">0%</span>
+                            <span id="total-count-text" class="text-sm text-slate-500">(0명)</span>
+                        </div>
+                        <div class="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
+                            <div id="total-progress-bar" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="font-bold text-slate-700">휴가 출타율 현황</h4>
+                        </div>
+                        <div class="flex items-baseline gap-2 mb-4">
+                            <span id="vacation-percentage" class="text-4xl font-extrabold text-slate-900">0%</span>
+                            <span id="vacation-count-text" class="text-sm text-slate-500">(0명)</span>
+                        </div>
+                        <div class="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
+                            <div id="vacation-progress-bar" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 모달 영역 -->
+    <div id="modal-container"></div>
+
+    <script>
+        let settings = { totalTroops: 100, totalRate: 20, vacationRate: 15 };
+        let leaves = [];
+        let isAdmin = false;
+
+        window.onload = function() {
+            initDates();
+        };
+
+        function initDates() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('start-date').value = today;
+            document.getElementById('end-date').value = today;
+        }
+
+        // Firestore 실시간 데이터 동기화 리스너
+        window.initFirebaseRealtimeSync = function() {
+            const q = query(collection(window.db, "leaves"));
+            window.onSnapshot(q, (snapshot) => {
+                leaves = [];
+                snapshot.forEach((docSnap) => {
+                    leaves.push({ firebaseId: docSnap.id, ...docSnap.data() });
+                });
+                
+                recalculateCapacities();
+                updateDashboard();
+            });
+        };
+
+        function showPublicCalendar() {
+            let html = `
+                <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-xl">
+                        <div class="flex justify-between items-center border-b pb-3">
+                            <h3 id="public-calendar-month-title" class="text-lg font-bold text-slate-900">출타 현황 달력</h3>
+                            <div class="flex gap-2">
+                                <button onclick="changePublicMonth(-1)" class="px-3 py-1 border rounded-lg hover:bg-slate-100 text-sm"><i class="fa-solid fa-chevron-left"></i> 이전</button>
+                                <button onclick="changePublicMonth(1)" class="px-3 py-1 border rounded-lg hover:bg-slate-100 text-sm">다음 <i class="fa-solid fa-chevron-right"></i></button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1 text-center font-bold text-sm text-slate-500 border-b pb-2">
+                            <div class="text-red-500">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="text-blue-500">토</div>
+                        </div>
+                        <div id="public-calendar-grid" class="grid grid-cols-7 gap-1"></div>
+                        <button onclick="closeModal()" class="w-full bg-slate-900 text-white py-2.5 rounded-xl text-sm font-semibold">닫기</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modal-container').innerHTML = html;
+            renderPublicCalendar();
+        }
+
+        let pubYear = new Date().getFullYear();
+        let pubMonth = new Date().getMonth();
+
+        function renderPublicCalendar() {
+            const title = document.getElementById('public-calendar-month-title');
+            const grid = document.getElementById('public-calendar-grid');
+            if (!title || !grid) return;
+            title.innerText = `${pubYear}년 ${pubMonth + 1}월 출타 현황`;
+            grid.innerHTML = '';
+
+            const firstDay = new Date(pubYear, pubMonth, 1).getDay();
+            const lastDate = new Date(pubYear, pubMonth + 1, 0).getDate();
+
+            for (let i = 0; i < firstDay; i++) {
+                grid.innerHTML += `<div></div>`;
+            }
+
+            for (let d = 1; d <= lastDate; d++) {
+                const dateStr = `${pubYear}-${String(pubMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const activeLeaves = leaves.filter(l => l.status === '승인' && l.startDate <= dateStr && l.endDate >= dateStr);
+
+                const cell = document.createElement('div');
+                cell.className = "border rounded-lg p-2 h-20 flex flex-col justify-between bg-slate-50 overflow-y-auto";
+                
+                let namesHtml = activeLeaves.map(l => `<div class="text-[11px] bg-emerald-100 text-emerald-800 px-1 rounded truncate font-semibold">${l.rank} ${l.name}</div>`).join('');
+
+                cell.innerHTML = `
+                    <div class="font-bold text-xs text-slate-700">${d}</div>
+                    <div class="space-y-1">${namesHtml}</div>
+                `;
+                grid.appendChild(cell);
+            }
+        }
+
+        function changePublicMonth(diff) {
+            pubMonth += diff;
+            if (pubMonth > 11) { pubMonth = 0; pubYear++; }
+            else if (pubMonth < 0) { pubMonth = 11; pubYear--; }
+            renderPublicCalendar();
+        }
+
+        function openAdminLoginModal() {
+            let html = `
+                <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div class="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl">
+                        <h3 class="text-lg font-bold text-slate-900">관리자 로그인</h3>
+                        <input type="password" id="admin-pw" placeholder="비밀번호 입력" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-slate-900 focus:outline-none">
+                        <div class="flex gap-2">
+                            <button onclick="closeModal()" class="flex-1 bg-slate-200 text-slate-700 py-2 rounded-xl text-sm font-semibold">취소</button>
+                            <button onclick="verifyAdminPassword()" class="flex-1 bg-slate-900 text-white py-2 rounded-xl text-sm font-semibold">로그인</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modal-container').innerHTML = html;
+        }
+
+        function verifyAdminPassword() {
+            const pw = document.getElementById('admin-pw').value;
+            if (pw === '1234') { // 기본 비밀번호 1234
+                isAdmin = true;
+                closeModal();
+                showAdminSettingsModal();
+            } else {
+                alert("비밀번호가 틀렸습니다.");
+            }
+        }
+
+        function showAdminSettingsModal() {
+            let html = `
+                <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+                        <h3 class="text-lg font-bold text-slate-900">부대 설정 및 정원 관리</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">총 부대원 수</label>
+                                <input type="number" id="set-troops" value="${settings.totalTroops}" class="w-full px-3 py-2 border rounded-lg text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">총 출타율 한도 (%)</label>
+                                <input type="number" id="set-total-rate" value="${settings.totalRate}" class="w-full px-3 py-2 border rounded-lg text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">휴가 출타율 한도 (%)</label>
+                                <input type="number" id="set-vacation-rate" value="${settings.vacationRate}" class="w-full px-3 py-2 border rounded-lg text-sm">
+                            </div>
+                        </div>
+                        <div class="flex gap-2 pt-2">
+                            <button onclick="closeModal()" class="flex-1 bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold">닫기</button>
+                            <button onclick="saveAdminSettings()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-semibold">설정 저장</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modal-container').innerHTML = html;
+        }
+
+        function saveAdminSettings() {
+            settings.totalTroops = parseInt(document.getElementById('set-troops').value) || 100;
+            settings.totalRate = parseFloat(document.getElementById('set-total-rate').value) || 20;
+            settings.vacationRate = parseFloat(document.getElementById('set-vacation-rate').value) || 15;
+            closeModal();
+            recalculateCapacities();
+            updateDashboard();
+            alert("설정이 저장되었습니다.");
+        }
+
+        function onLeaveTypeChange() {
+            const type = document.getElementById('leave-type').value;
+            const reasonContainer = document.getElementById('reason-container');
+            const reasonInput = document.getElementById('leave-reason');
+            const outingSubSelector = document.getElementById('outing-sub-selector');
+            const buddySection = document.getElementById('buddy-section');
+            const visitorSection = document.getElementById('visitor-section');
+            const accommodationSection = document.getElementById('accommodation-section');
+
+            reasonContainer.style.display = 'block';
+            reasonInput.placeholder = "";
+            outingSubSelector.style.display = 'none';
+            buddySection.style.display = 'none';
+            visitorSection.style.display = 'none';
+            accommodationSection.style.display = 'none';
+            document.getElementById('visitor-list').innerHTML = '';
+            document.getElementById('buddy-list').innerHTML = '';
+
+            if (type === '휴가') {
+                reasonInput.placeholder = "예: 연가 4일, 구직청원 2일";
+            } else if (type === '외출') {
+                reasonInput.placeholder = "예: 주말 면회 외출";
+                outingSubSelector.style.display = 'block';
+                toggleOutingSubType();
+            } else if (type === '외박') {
+                reasonInput.placeholder = "예: 1박 2일 외박";
+                accommodationSection.style.display = 'block';
+                outingSubSelector.style.display = 'block';
+                toggleOutingSubType();
+            } else if (type === '면회') {
+                reasonContainer.style.display = 'none';
+                visitorSection.style.display = 'block';
+                addVisitorField();
+            }
+        }
+
+        function toggleOutingSubType() {
+            const subType = document.querySelector('input[name="outing-sub-type"]:checked').value;
+            const buddySection = document.getElementById('buddy-section');
+            const visitorSection = document.getElementById('visitor-section');
+
+            if (subType === 'buddy') {
+                buddySection.style.display = 'block';
+                visitorSection.style.display = 'none';
+                if (document.getElementById('buddy-list').children.length === 0) addBuddyField();
+            } else {
+                buddySection.style.display = 'none';
+                visitorSection.style.display = 'block';
+                if (document.getElementById('visitor-list').children.length === 0) addVisitorField();
+            }
+        }
+
+        function addBuddyField() {
+            const list = document.getElementById('buddy-list');
+            const div = document.createElement('div');
+            div.className = "space-y-2 bg-white p-3 rounded-lg border";
+            div.innerHTML = `
+                <div class="grid grid-cols-2 gap-2">
+                    <select class="buddy-rank w-full px-3 py-2 border rounded-lg text-sm">
+                        <option value="이병">이병</option>
+                        <option value="일병">일병</option>
+                        <option value="상병">상병</option>
+                        <option value="병장" selected>병장</option>
+                    </select>
+                    <input type="text" class="buddy-name w-full px-3 py-2 border rounded-lg text-sm" placeholder="성명">
+                </div>
+                <div class="grid grid-cols-1 gap-2">
+                    <input type="text" class="buddy-serial w-full px-3 py-2 border rounded-lg text-sm" placeholder="군번">
+                </div>
+                <div class="grid grid-cols-1 gap-2">
+                    <input type="tel" class="buddy-phone w-full px-3 py-2 border rounded-lg text-sm" placeholder="연락처">
+                </div>
+                <div class="flex justify-end pt-1">
+                    <button type="button" onclick="this.closest('.space-y-2').remove()" class="text-red-500 text-xs font-semibold flex items-center gap-1"><i class="fa-solid fa-trash"></i> 삭제</button>
+                </div>
+            `;
+            list.appendChild(div);
+        }
+
+        function addVisitorField() {
+            const list = document.getElementById('visitor-list');
+            const div = document.createElement('div');
+            div.className = "space-y-2 bg-white p-3 rounded-lg border relative";
+            const isPureVisit = document.getElementById('leave-type').value === '면회';
+
+            let innerHtml = `
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="text" class="visitor-name w-full px-3 py-2 border rounded-lg text-sm" placeholder="면회객 성명">
+                    <input type="text" class="visitor-relation w-full px-3 py-2 border rounded-lg text-sm" placeholder="관계">
+                </div>
+                <div class="grid grid-cols-1 gap-2">
+                    <input type="tel" class="visitor-phone w-full px-3 py-2 border rounded-lg text-sm" placeholder="연락처">
+                </div>
+            `;
+
+            if (isPureVisit) {
+                innerHtml += `
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input type="text" class="visitor-birth w-full px-3 py-2 border rounded-lg text-sm" placeholder="생년월일">
+                        <input type="text" class="visitor-address w-full px-3 py-2 border rounded-lg text-sm" placeholder="주소">
+                    </div>
+                `;
+            }
+
+            innerHtml += `
+                <div class="flex justify-end pt-1">
+                    <button type="button" onclick="this.closest('.space-y-2').remove()" class="text-red-500 text-xs font-semibold flex items-center gap-1"><i class="fa-solid fa-trash"></i> 삭제</button>
+                </div>
+            `;
+
+            div.innerHTML = innerHtml;
+            list.appendChild(div);
+        }
+
+        // Firestore에 데이터 전송 (즉시 승인)
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const type = document.getElementById('leave-type').value;
+            const newLeave = {
+                id: Date.now(),
+                name: document.getElementById('soldier-name').value,
+                serial: document.getElementById('soldier-serial').value,
+                rank: document.getElementById('soldier-rank').value,
+                phone: document.getElementById('soldier-phone').value,
+                type: type,
+                destination: document.getElementById('destination').value,
+                accommodation: document.getElementById('accommodation').value,
+                startDate: document.getElementById('start-date').value,
+                endDate: document.getElementById('end-date').value,
+                reason: type === '면회' ? '면회' : document.getElementById('leave-reason').value,
+                status: '승인',
+                buddies: [],
+                visitors: []
+            };
+
+            if ((type === '외출' || type === '외박') && document.querySelector('input[name="outing-sub-type"]:checked').value === 'buddy') {
+                document.querySelectorAll('#buddy-list > div').forEach(el => {
+                    newLeave.buddies.push({
+                        rank: el.querySelector('.buddy-rank').value,
+                        name: el.querySelector('.buddy-name').value,
+                        serial: el.querySelector('.buddy-serial').value,
+                        phone: el.querySelector('.buddy-phone').value
+                    });
+                });
+            } else {
+                document.querySelectorAll('#visitor-list > div').forEach(el => {
+                    newLeave.visitors.push({
+                        name: el.querySelector('.visitor-name').value,
+                        relation: el.querySelector('.visitor-relation').value,
+                        phone: el.querySelector('.visitor-phone').value,
+                        birth: el.querySelector('.visitor-birth') ? el.querySelector('.visitor-birth').value : '',
+                        address: el.querySelector('.visitor-address') ? el.querySelector('.visitor-address').value : ''
+                    });
+                });
+            }
+
+            try {
+                await window.addDoc(window.collection(window.db, "leaves"), newLeave);
+                alert("출타 신청서가 제출되어 즉시 승인 및 반영되었습니다.");
+                document.getElementById('leave-form').reset();
+                initDates();
+            } catch (error) {
+                console.error("데이터 전송 오류: ", error);
+                alert("신청 중 오류가 발생했습니다.");
+            }
+        }
+
+        function recalculateCapacities() {
+            checkCapacityAndAutoQueue('휴가');
+            checkCapacityAndAutoQueue('기타');
+        }
+
+        function checkCapacityAndAutoQueue(groupType) {
+            let maxLimit = 0;
+            if (groupType === '휴가') {
+                maxLimit = Math.floor(settings.totalTroops * (settings.vacationRate / 100));
+            } else {
+                maxLimit = Math.floor(settings.totalTroops * (settings.totalRate / 100));
+            }
+
+            while (true) {
+                let activeByDate = {};
+                let approvedFiltered = leaves.filter(l => {
+                    if (groupType === '휴가') return l.type === '휴가' && l.status === '승인';
+                    return l.type !== '휴가' && l.status === '승인';
+                });
+
+                approvedFiltered.forEach(l => {
+                    let curr = new Date(l.startDate);
+                    let end = new Date(l.endDate);
+                    while (curr <= end) {
+                        let dStr = curr.toISOString().split('T')[0];
+                        activeByDate[dStr] = (activeByDate[dStr] || 0) + 1;
+                        curr.setDate(curr.getDate() + 1);
+                    }
+                });
+
+                let overflowDate = null;
+                for (let dStr in activeByDate) {
+                    if (activeByDate[dStr] > maxLimit) {
+                        overflowDate = dStr;
+                        break;
+                    }
+                }
+
+                if (!overflowDate) break;
+
+                let candidates = approvedFiltered.filter(l => l.endDate <= overflowDate);
+                if (candidates.length === 0) candidates = approvedFiltered;
+                if (candidates.length === 0) break;
+
+                // 외출/외박 우선 대기 전환, 이후 복귀일 인접성 기준 적용
+                candidates.sort((a, b) => {
+                    let aIsVacation = (a.type === '휴가') ? 1 : 0;
+                    let bIsVacation = (b.type === '휴가') ? 1 : 0;
+                    if (aIsVacation !== bIsVacation) return aIsVacation - bIsVacation;
+                    return new Date(b.endDate) - new Date(a.endDate);
+                });
+
+                let targetToQueue = candidates[0];
+                let found = leaves.find(l => l.id === targetToQueue.id);
+                if (found) {
+                    found.status = '대기(초과)';
+                } else {
+                    break;
+                }
+            }
+        }
+
+        function updateDashboard() {
+            const approved = leaves.filter(l => l.status === '승인');
+            const totalCount = approved.length;
+            const vacationCount = approved.filter(l => l.type === '휴가').length;
+
+            const maxTotal = Math.floor(settings.totalTroops * (settings.totalRate / 100));
+            const maxVacation = Math.floor(settings.totalTroops * (settings.vacationRate / 100));
+
+            const totalPct = Math.min(100, Math.round((totalCount / maxTotal) * 100) || 0);
+            const vacPct = Math.min(100, Math.round((vacationCount / maxVacation) * 100) || 0);
+
+            document.getElementById('total-percentage').innerText = totalPct + '%';
+            document.getElementById('total-count-text').innerText = `(${totalCount}명 / 최대 ${maxTotal}명)`;
+            document.getElementById('total-progress-bar').style.width = totalPct + '%';
+
+            document.getElementById('vacation-percentage').innerText = vacPct + '%';
+            document.getElementById('vacation-count-text').innerText = `(${vacationCount}명 / 최대 ${maxVacation}명)`;
+            document.getElementById('vacation-progress-bar').style.width = vacPct + '%';
+        }
+
+        function closeModal() {
+            document.getElementById('modal-container').innerHTML = '';
+        }
+    </script>
+</body>
+</html>
